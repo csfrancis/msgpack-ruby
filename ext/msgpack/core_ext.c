@@ -113,6 +113,13 @@ static VALUE Symbol_to_msgpack(int argc, VALUE* argv, VALUE self)
     return packer;
 }
 
+static VALUE Time_to_msgpack(int argc, VALUE* argv, VALUE self)
+{
+    ENSURE_PACKER(argc, argv, packer, pk);
+    msgpack_packer_write_time_value(pk, self);
+    return packer;
+}
+
 void MessagePack_core_ext_module_init()
 {
     rb_define_method(rb_cNilClass,   "to_msgpack", NilClass_to_msgpack, -1);
@@ -125,5 +132,6 @@ void MessagePack_core_ext_module_init()
     rb_define_method(rb_cArray,  "to_msgpack", Array_to_msgpack, -1);
     rb_define_method(rb_cHash,   "to_msgpack", Hash_to_msgpack, -1);
     rb_define_method(rb_cSymbol, "to_msgpack", Symbol_to_msgpack, -1);
+    rb_define_method(rb_cTime, "to_msgpack", Time_to_msgpack, -1);
 }
 

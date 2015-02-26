@@ -32,6 +32,9 @@ static msgpack_rmem_t s_stack_rmem;
 static int s_enc_utf8;
 #endif
 
+static ID s_at;
+static ID s_utc;
+
 void msgpack_unpacker_static_init()
 {
 #ifdef UNPACKER_STACK_RMEM
@@ -41,6 +44,9 @@ void msgpack_unpacker_static_init()
 #ifdef COMPAT_HAVE_ENCODING
     s_enc_utf8 = rb_utf8_encindex();
 #endif
+
+    s_at = rb_intern("at");
+    s_utc = rb_intern("utc");
 }
 
 void msgpack_unpacker_static_destroy()
@@ -269,6 +275,26 @@ static inline int read_raw_body_begin(msgpack_unpacker_t* uk, bool str)
     return read_raw_body_cont(uk);
 }
 
+static VALUE msgpack_unpack_fixext(char type, char *buffer, size_t sz)
+{
+    switch(type) {
+    case MSGPACK_RB_EXT_TIME:
+    {
+        VALUE t;
+        uint32_t sec, nsec;
+
+        if (sz != 8) return Qnil;
+
+        sec = _msgpack_be32(*((uint32_t *) buffer));
+        nsec = _msgpack_be32(*((uint32_t *) buffer + 1));
+        t = rb_funcall(rb_cTime, s_at, 2, UINT2NUM(sec), DBL2NUM((double) nsec / 1000));
+        return rb_funcall(t, s_utc, 0);
+    }
+    default:
+        return Qnil;
+    }
+}
+
 static int read_primitive(msgpack_unpacker_t* uk)
 {
     if(uk->reading_raw_remaining > 0) {
@@ -397,10 +423,23 @@ static int read_primitive(msgpack_unpacker_t* uk)
                 return object_complete(uk, rb_ll2inum(i64));
             }
 
-        //case 0xd4:  // fixext 1
-        //case 0xd5:  // fixext 2
-        //case 0xd6:  // fixext 4
-        //case 0xd7:  // fixext 8
+        case 0xd4:  // fixext 1
+        case 0xd5:  // fixext 2
+        case 0xd6:  // fixext 4
+        case 0xd7:  // fixext 8
+            {
+                VALUE v;
+                int ret = PRIMITIVE_UNEXPECTED_TYPE;
+                size_t sz = 1 << (b - 0xd4);
+                READ_CAST_BLOCK_OR_RETURN_EOF(cb, uk, sz + 1);
+                v = msgpack_unpack_fixext(*(cb->buffer), cb->buffer + 1, sz);
+                if (RTEST(v)) {
+                    reset_head_byte(uk);
+                    uk->last_object = v;
+                    ret = PRIMITIVE_OBJECT_COMPLETE;
+                }
+                return ret;
+            }
         //case 0xd8:  // fixext 16
 
         case 0xd9:  // raw 8 / str 8
@@ -724,6 +763,13 @@ int msgpack_unpacker_peek_next_object_type(msgpack_unpacker_t* uk)
         case 0xd2:  // signed int 32
         case 0xd3:  // signed int 64
             return TYPE_INTEGER;
+
+        case 0xd4:
+        case 0xd5:
+        case 0xd6:
+        case 0xd7:
+        case 0xd8:
+            return TYPE_EXT_FIXED;
 
         case 0xd9:  // raw 8 / str 8
         case 0xda:  // raw 16 / str 16

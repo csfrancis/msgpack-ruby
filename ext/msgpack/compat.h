@@ -109,5 +109,10 @@
 #endif
 
 
+/*
+ * MessagePack extension types for Ruby
+ */
+ #define MSGPACK_RB_EXT_TIME 1
+
 #endif
 

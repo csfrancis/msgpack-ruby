@@ -72,6 +72,7 @@ enum msgpack_unpacker_object_type {
     TYPE_RAW,
     TYPE_ARRAY,
     TYPE_MAP,
+    TYPE_EXT_FIXED,
 };
 
 void msgpack_unpacker_static_init();

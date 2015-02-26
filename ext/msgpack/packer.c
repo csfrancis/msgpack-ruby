@@ -25,6 +25,11 @@ static ID s_key;
 static ID s_value;
 #endif
 
+static ID s_tv_sec;
+static ID s_tv_nsec;
+static ID s_utc;
+static ID s_is_utc;
+
 void msgpack_packer_static_init()
 {
 #ifdef RUBINIUS
@@ -33,6 +38,10 @@ void msgpack_packer_static_init()
     s_key = rb_intern("key");
     s_value = rb_intern("value");
 #endif
+    s_tv_sec = rb_intern("tv_sec");
+    s_tv_nsec = rb_intern("tv_nsec");
+    s_utc = rb_intern("utc");
+    s_is_utc = rb_intern("utc?");
 }
 
 void msgpack_packer_static_destroy()
@@ -121,6 +130,27 @@ void msgpack_packer_write_hash_value(msgpack_packer_t* pk, VALUE v)
 #else
     rb_hash_foreach(v, write_hash_foreach, (VALUE) pk);
 #endif
+}
+
+void msgpack_packer_write_time_value(msgpack_packer_t* pk, VALUE v)
+{
+    VALUE sec, nsec, utc;
+    uint32_t be;
+
+    if (RTEST(rb_funcall(v, s_is_utc, 0))) {
+        utc = v;
+    } else {
+        utc = rb_funcall(v, s_utc, 0);
+    }
+    sec = rb_funcall(utc, s_tv_sec, 0);
+    nsec = rb_funcall(utc, s_tv_nsec, 0);
+
+    msgpack_buffer_ensure_writable(PACKER_BUFFER_(pk), 10);
+    msgpack_buffer_write_2(PACKER_BUFFER_(pk), 0xd7, MSGPACK_RB_EXT_TIME);
+    be = _msgpack_be32((uint32_t) FIX2UINT(sec));
+    msgpack_buffer_write_data(PACKER_BUFFER_(pk), (const void *) &be, 4);
+    be = _msgpack_be32((uint32_t) FIX2UINT(nsec));
+    msgpack_buffer_write_data(PACKER_BUFFER_(pk), (const void *) &be, 4);
 }
 
 static void _msgpack_packer_write_other_value(msgpack_packer_t* pk, VALUE v)
